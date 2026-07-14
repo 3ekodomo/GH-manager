@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GH Uploader</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#f6f8fa" id="theme-meta">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>GH Uploader</h1>
+            <select id="theme-selector">
+                <option value="light">Light Mode</option>
+                <option value="dark">Dark Mode</option>
+                <option value="black">Amoled Black</option>
+            </select>
+        </header>
+
+        <section class="config-section">
+            <input type="password" id="gh-token" placeholder="GitHub Personal Access Token" />
+            <input type="text" id="gh-repo" placeholder="Owner/Repo (e.g., yourname/gh-uploader)" />
+        </section>
+
+        <div class="tab-nav">
+            <button id="tab-upload-btn" class="active-tab">Upload</button>
+            <button id="tab-manage-btn">Manage Repo</button>
+        </div>
+
+        <div id="upload-view">
+            <section class="config-section">
+                <input type="text" id="gh-folder" placeholder="Upload Folder (leave blank for root)" />
+            </section>
+            <section class="upload-section">
+                <input type="file" id="file-input" accept="image/*, .pdf, .txt, .zip, video/*, audio/*" multiple />
+                <div class="action-buttons">
+                    <button id="paste-btn">Paste Image</button>
+                    <button id="upload-btn">Upload File(s)</button>
+                </div>
+                <div id="status-message"></div>
+            </section>
+            <section class="history-section">
+                <h2>Upload History</h2>
+                <div id="history-list"></div>
+            </section>
+        </div>
+
+        <div id="manage-view" style="display: none;">
+            <div class="action-buttons">
+                <input type="text" id="manager-path" placeholder="Path (e.g., folder/subfolder or leave blank)" />
+                <button id="refresh-dir-btn">Load Files</button>
+            </div>
+            <div id="manager-status"></div>
+            <div id="repo-file-list"></div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
