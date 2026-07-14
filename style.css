@@ -261,3 +261,33 @@ button:disabled:hover {
     background-color: #0969da;
     color: #ffffff;
 }
+
+/* --- Manager Thumbnails --- */
+.manager-thumb {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    object-fit: cover;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--bg-color);
+    font-weight: bold;
+    font-size: 10px;
+    color: var(--text);
+    overflow: hidden;
+}
+
+.manager-thumb:hover {
+    opacity: 0.8;
+}
+
+/* Update repo-item info to show it is clickable */
+.repo-item-info {
+    flex-grow: 1;
+    overflow: hidden;
+    cursor: pointer;
+}
