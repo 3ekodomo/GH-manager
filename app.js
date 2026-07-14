@@ -41,7 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
         manageView.style.display = 'block';
         tabManageBtn.classList.add('active-tab');
         tabUploadBtn.classList.remove('active-tab');
-        if (repoFileList.innerHTML === '') loadRepoFiles(); // Auto-load if empty
+        if (repoFileList.innerHTML === '') loadRepoFiles(); 
     });
 
     // --- Dynamic Status Bar & Theme Management ---
@@ -50,7 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (themeMeta) {
             if (theme === 'dark') themeMeta.content = '#0d1117';
             else if (theme === 'black') themeMeta.content = '#000000';
-            else themeMeta.content = '#f6f8fa'; // light
+            else themeMeta.content = '#f6f8fa'; 
         }
     }
 
@@ -74,6 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- jsDelivr URL Converter ---
     function getCdnUrl(rawUrl) {
+        if (!rawUrl) return '';
         return rawUrl.replace(
             /raw\.githubusercontent\.com\/([^\/]+)\/([^\/]+)\/([^\/]+)\//, 
             'cdn.jsdelivr.net/gh/$1/$2@$3/'
@@ -239,19 +240,34 @@ document.addEventListener('DOMContentLoaded', () => {
             fileArray.forEach(file => {
                 const div = document.createElement('div');
                 div.className = 'repo-item';
+                
+                const isImage = file.name.match(/\.(jpeg|jpg|gif|png|webp|svg)$/i);
+                const cdnUrl = file.download_url ? getCdnUrl(file.download_url) : '';
+                
+                // Construct thumbnail and click handlers
+                const isFile = file.type === 'file';
+                const fileClickHandler = isFile ? `window.open('${cdnUrl}', '_blank')` : `document.getElementById('manager-path').value = '${file.path}'; document.getElementById('refresh-dir-btn').click();`;
+
+                const thumbHtml = isFile
+                    ? (isImage 
+                        ? `<img src="${cdnUrl}" class="manager-thumb" onclick="${fileClickHandler}" alt="preview">` 
+                        : `<div class="manager-thumb" onclick="${fileClickHandler}">FILE</div>`)
+                    : `<div class="manager-thumb" onclick="${fileClickHandler}">DIR</div>`;
+
                 div.innerHTML = `
-                    <div class="repo-item-info">
+                    ${thumbHtml}
+                    <div class="repo-item-info" onclick="${fileClickHandler}">
                         <div class="repo-item-name">${file.name}</div>
                         <div class="repo-item-type">${file.type}</div>
                     </div>
-                    ${file.type === 'file' ? `
+                    ${isFile ? `
                     <div class="repo-actions">
                         <button class="btn-move" onclick="renameFile('${file.path}', '${file.sha}')">Move</button>
                         <button class="delete-btn" onclick="deleteRemoteFile('${file.path}', '${file.sha}')">Delete</button>
                     </div>
                     ` : `
                     <div class="repo-actions">
-                        <button class="btn-move" onclick="document.getElementById('manager-path').value = '${file.path}'; document.getElementById('refresh-dir-btn').click();">Open Dir</button>
+                        <button class="btn-move" onclick="${fileClickHandler}">Open Dir</button>
                     </div>
                     `}
                 `;
@@ -329,17 +345,19 @@ document.addEventListener('DOMContentLoaded', () => {
         managerStatus.innerText = `Moving ${oldPath} to ${newPath}...`;
 
         try {
-            // Get content
-            const getRes = await fetch(`https://api.github.com/repos/${repo}/contents/${oldPath}`, {
+            // STEP 1: Get content via Git Blobs API (bypasses 1MB limit on contents API)
+            const getRes = await fetch(`https://api.github.com/repos/${repo}/git/blobs/${sha}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            const fileData = await getRes.json();
             
-            if (!fileData.content) {
-                throw new Error("File too large or unreadable for moving via this API.");
+            if (!getRes.ok) throw new Error("Failed to fetch source file data from GitHub.");
+            const blobData = await getRes.json();
+            
+            if (!blobData.content) {
+                throw new Error("File content could not be read.");
             }
 
-            // Create new file
+            // STEP 2: Create new file using the base64 content
             const putRes = await fetch(`https://api.github.com/repos/${repo}/contents/${newPath}`, {
                 method: 'PUT',
                 headers: {
@@ -348,13 +366,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 },
                 body: JSON.stringify({
                     message: `Move ${oldPath} to ${newPath}`,
-                    content: fileData.content.replace(/\n/g, '')
+                    content: blobData.content.replace(/\n/g, '') // Strip breaks from base64
                 })
             });
 
-            if (!putRes.ok) throw new Error("Failed to create new file.");
+            if (!putRes.ok) throw new Error("Failed to create the new file at destination.");
 
-            // Delete old file
+            // STEP 3: Delete old file
             const delRes = await fetch(`https://api.github.com/repos/${repo}/contents/${oldPath}`, {
                 method: 'DELETE',
                 headers: {
