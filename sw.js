@@ -15,14 +15,17 @@ self.addEventListener('fetch', (event) => {
             const files = formData.getAll('file'); 
             
             const cache = await caches.open('shared-files');
+            const fileNames = [];
             
-            // Store each file sequentially
+            // Store each file sequentially and save its original name
             for (let i = 0; i < files.length; i++) {
                 await cache.put(`/shared-file-${i}`, new Response(files[i]));
+                fileNames.push(files[i].name);
             }
             
-            // Store the total count so app.js knows how many to pull
+            // Store the total count and the original names
             await cache.put('/shared-file-count', new Response(files.length.toString()));
+            await cache.put('/shared-file-names', new Response(JSON.stringify(fileNames)));
             
             return Response.redirect('./index.html', 303);
         })());
