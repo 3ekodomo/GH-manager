@@ -400,22 +400,34 @@ document.addEventListener('DOMContentLoaded', () => {
         if ('caches' in window) {
             const cache = await caches.open('shared-files');
             const countRes = await cache.match('/shared-file-count');
+            const namesRes = await cache.match('/shared-file-names'); // Fetch saved names
             
             if (countRes) {
                 const count = parseInt(await countRes.text());
+                const names = namesRes ? await namesRes.json() : [];
                 const dataTransfer = new DataTransfer();
                 
                 for (let i = 0; i < count; i++) {
                     const res = await cache.match(`/shared-file-${i}`);
                     if (res) {
                         const blob = await res.blob();
-                        const file = new File([blob], `shared_upload_${i}_${Date.now()}`, { type: blob.type });
+                        
+                        // Fallback logic to ensure an extension always exists
+                        const ext = blob.type.split('/')[1] || 'bin';
+                        const fallbackName = `shared_upload_${i}_${Date.now()}.${ext}`;
+                        
+                        // Use original name if available, otherwise use fallback
+                        const fileName = names[i] || fallbackName;
+                        
+                        const file = new File([blob], fileName, { type: blob.type });
                         dataTransfer.items.add(file);
                         await cache.delete(`/shared-file-${i}`);
                     }
                 }
                 
                 await cache.delete('/shared-file-count');
+                if (namesRes) await cache.delete('/shared-file-names'); // Clean up names cache
+                
                 if (dataTransfer.files.length > 0) {
                     fileInput.files = dataTransfer.files;
                     statusMsg.innerText = `${dataTransfer.files.length} shared file(s) ready to upload!`;
