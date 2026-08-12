@@ -72,6 +72,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
     checkSharedFiles();
 
+    // --- Helper: Get Extension from MIME ---
+    function getExtensionFromMime(mimeType, filename = '') {
+        if (filename.includes('.')) {
+            return filename.split('.').pop();
+        }
+        const mimeMap = {
+            'application/pdf': 'pdf',
+            'text/plain': 'txt',
+            'image/jpeg': 'jpg',
+            'image/png': 'png',
+            'image/gif': 'gif',
+            'image/webp': 'webp',
+            'image/svg+xml': 'svg',
+            'application/zip': 'zip',
+            'application/x-zip-compressed': 'zip',
+            'audio/mpeg': 'mp3',
+            'video/mp4': 'mp4'
+        };
+        let ext = mimeMap[mimeType];
+        if (!ext && mimeType) {
+            ext = mimeType.split('/')[1];
+            if (ext) ext = ext.split(';')[0]; // Strip charset info
+        }
+        return ext || 'bin';
+    }
+
     // --- jsDelivr URL Converter ---
     function getCdnUrl(rawUrl) {
         if (!rawUrl) return '';
@@ -92,7 +118,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     const imageTypes = item.types.filter(type => type.startsWith('image/'));
                     for (const type of imageTypes) {
                         const blob = await item.getType(type);
-                        const file = new File([blob], `pasted_${Date.now()}.${type.split('/')[1]}`, { type });
+                        const ext = getExtensionFromMime(type);
+                        const file = new File([blob], `pasted_${Date.now()}.${ext}`, { type });
                         dataTransfer.items.add(file);
                     }
                 }
@@ -134,26 +161,54 @@ document.addEventListener('DOMContentLoaded', () => {
             
             try {
                 const base64Data = await toBase64(file);
-                const fileName = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
+                
+                // Preserve original name, just ensure it has a proper extension
+                let originalName = file.name;
+                const ext = getExtensionFromMime(file.type, originalName);
+                if (!originalName.includes('.')) {
+                    originalName = `${originalName}.${ext}`;
+                }
+
+                // Sanitize spaces but keep the exact name to prevent "random shit" naming
+                const fileName = originalName.replace(/\s+/g, '_');
                 const path = folder ? `${folder}/${fileName}` : fileName;
 
+                // Step 1: Check if file already exists so we can overwrite it (prevents 422 error)
+                let existingSha = undefined;
+                try {
+                    const checkRes = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (checkRes.ok) {
+                        const checkData = await checkRes.json();
+                        existingSha = checkData.sha;
+                    }
+                } catch(e) { /* File doesn't exist yet, proceed normally */ }
+
+                // Step 2: Prepare payload
+                const payload = {
+                    message: `Upload ${fileName}`,
+                    content: base64Data
+                };
+                if (existingSha) {
+                    payload.sha = existingSha; // Allows safe overwriting of exact filename
+                }
+
+                // Step 3: Upload
                 const response = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
                     method: 'PUT',
                     headers: {
                         'Authorization': `Bearer ${token}`,
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        message: `Upload ${fileName}`,
-                        content: base64Data
-                    })
+                    body: JSON.stringify(payload)
                 });
 
                 const data = await response.json();
                 if (response.ok) {
                     successCount++;
                     const cdnUrl = getCdnUrl(data.content.download_url);
-                    saveToHistory(cdnUrl, file.type);
+                    saveToHistory(cdnUrl, file.type, fileName);
                 } else {
                     console.error(`Error uploading ${file.name}:`, data.message);
                 }
@@ -177,9 +232,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function saveToHistory(url, type) {
+    function saveToHistory(url, type, filename = '') {
         let history = JSON.parse(localStorage.getItem('ghHistory')) || [];
-        history.unshift({ url, type, date: new Date().toLocaleString() });
+        history.unshift({ url, type, filename, date: new Date().toLocaleString() });
         localStorage.setItem('ghHistory', JSON.stringify(history));
     }
 
@@ -193,9 +248,14 @@ document.addEventListener('DOMContentLoaded', () => {
             div.className = 'history-item';
             
             const isImage = item.type.startsWith('image/');
+            
+            // Show proper extension block for non-images (e.g. PDF, TXT)
+            let extLabel = item.url.split('.').pop().toUpperCase();
+            if(extLabel.length > 4 || extLabel.includes('/')) extLabel = 'FILE';
+
             const thumb = isImage 
                 ? `<img src="${item.url}" class="history-thumb" onclick="window.open('${item.url}', '_blank')" alt="thumbnail">` 
-                : `<div class="history-thumb" onclick="window.open('${item.url}', '_blank')">${item.type.split('/')[0].toUpperCase() || 'FILE'}</div>`;
+                : `<div class="history-thumb" onclick="window.open('${item.url}', '_blank')">${extLabel}</div>`;
             const markdownCode = isImage ? `![Image](${item.url})` : `[File](${item.url})`;
 
             div.innerHTML = `
@@ -248,10 +308,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 const isFile = file.type === 'file';
                 const fileClickHandler = isFile ? `window.open('${cdnUrl}', '_blank')` : `document.getElementById('manager-path').value = '${file.path}'; document.getElementById('refresh-dir-btn').click();`;
 
+                let extLabel = file.name.split('.').pop().toUpperCase();
+                if(extLabel.length > 4) extLabel = extLabel.substring(0, 4);
+
                 const thumbHtml = isFile
                     ? (isImage 
                         ? `<img src="${cdnUrl}" class="manager-thumb" onclick="${fileClickHandler}" alt="preview">` 
-                        : `<div class="manager-thumb" onclick="${fileClickHandler}">FILE</div>`)
+                        : `<div class="manager-thumb" onclick="${fileClickHandler}">${extLabel}</div>`)
                     : `<div class="manager-thumb" onclick="${fileClickHandler}">DIR</div>`;
 
                 div.innerHTML = `
@@ -400,7 +463,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if ('caches' in window) {
             const cache = await caches.open('shared-files');
             const countRes = await cache.match('/shared-file-count');
-            const namesRes = await cache.match('/shared-file-names'); // Fetch saved names
+            const namesRes = await cache.match('/shared-file-names'); 
             
             if (countRes) {
                 const count = parseInt(await countRes.text());
@@ -412,21 +475,24 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (res) {
                         const blob = await res.blob();
                         
-                        // Fallback logic to ensure an extension always exists
-                        const ext = blob.type.split('/')[1] || 'bin';
-                        const fallbackName = `shared_upload_${i}_${Date.now()}.${ext}`;
+                        let originalName = names[i];
+                        const ext = getExtensionFromMime(blob.type, originalName);
                         
-                        // Use original name if available, otherwise use fallback
-                        const fileName = names[i] || fallbackName;
+                        // Avoid generic OS default names and apply proper extensions
+                        if (!originalName || originalName === 'blob' || originalName === 'image.jpg' || originalName === 'file') {
+                            originalName = `shared_file_${Date.now()}.${ext}`;
+                        } else if (!originalName.includes('.')) {
+                            originalName = `${originalName}.${ext}`;
+                        }
                         
-                        const file = new File([blob], fileName, { type: blob.type });
+                        const file = new File([blob], originalName, { type: blob.type });
                         dataTransfer.items.add(file);
                         await cache.delete(`/shared-file-${i}`);
                     }
                 }
                 
                 await cache.delete('/shared-file-count');
-                if (namesRes) await cache.delete('/shared-file-names'); // Clean up names cache
+                if (namesRes) await cache.delete('/shared-file-names'); 
                 
                 if (dataTransfer.files.length > 0) {
                     fileInput.files = dataTransfer.files;
