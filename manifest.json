@@ -7,18 +7,19 @@
   "theme_color": "#2ea44f",
   "icons": [
     {
-      "src": "icon-192.png",
+      "src": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "icon-512.png",
+      "src": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ],
   "share_target": {
-    "action": "./share",
+    "action": "./index.html?share=true",
     "method": "POST",
     "enctype": "multipart/form-data",
     "params": {
