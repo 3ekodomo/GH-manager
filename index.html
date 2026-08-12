@@ -35,7 +35,7 @@
             color: var(--text);
             margin: 0;
             padding: 20px;
-            padding-bottom: 80px; /* Space for bulk action bar */
+            padding-bottom: 80px;
             transition: background-color 0.3s, color 0.3s;
         }
         .container { max-width: 800px; margin: 0 auto; }
@@ -262,11 +262,12 @@
                 bulkCount: document.getElementById('bulk-count'), bulkMoveBtn: document.getElementById('bulk-move-btn'),
                 bulkDeleteBtn: document.getElementById('bulk-delete-btn'), compCb: document.getElementById('enable-compression'),
                 compOpts: document.getElementById('compression-options'), compQuality: document.getElementById('compression-quality'),
-                qualVal: document.getElementById('quality-val'), compQueue: document.getElementById('compression-queue')
+                qualVal: document.getElementById('quality-val'), compQueue: document.getElementById('compression-queue'),
+                importExportBtn: document.getElementById('import-export-btn')
             };
 
             let currentRepoFiles = [];
-            let processedUploadFiles = []; // Holds blobs ready for upload
+            let processedUploadFiles = [];
 
             // --- Theme & Tabs ---
             function applyTheme(theme) {
@@ -297,6 +298,40 @@
             DOM.repo.value = localStorage.getItem('ghRepo') || '';
             if(DOM.folder) DOM.folder.value = localStorage.getItem('ghFolder') || '';
 
+            // --- Data Button Modal ---
+            DOM.importExportBtn.addEventListener('click', () => {
+                const appData = {
+                    ghToken: localStorage.getItem('ghToken') || '',
+                    ghRepo: localStorage.getItem('ghRepo') || '',
+                    ghFolder: localStorage.getItem('ghFolder') || '',
+                    ghTheme: localStorage.getItem('ghTheme') || 'light',
+                    ghHistory: JSON.parse(localStorage.getItem('ghHistory')) || []
+                };
+                document.getElementById('data-textarea').value = JSON.stringify(appData, null, 2);
+                document.getElementById('data-modal').style.display = 'block';
+            });
+
+            window.closeDataModal = () => document.getElementById('data-modal').style.display = 'none';
+            
+            window.copyDataText = () => {
+                const textarea = document.getElementById('data-textarea');
+                textarea.select(); navigator.clipboard.writeText(textarea.value);
+                alert('JSON Data copied to clipboard!');
+            };
+
+            window.importData = () => {
+                try {
+                    const appData = JSON.parse(document.getElementById('data-textarea').value);
+                    if(appData.ghToken !== undefined) localStorage.setItem('ghToken', appData.ghToken);
+                    if(appData.ghRepo !== undefined) localStorage.setItem('ghRepo', appData.ghRepo);
+                    if(appData.ghFolder !== undefined) localStorage.setItem('ghFolder', appData.ghFolder);
+                    if(appData.ghTheme !== undefined) localStorage.setItem('ghTheme', appData.ghTheme);
+                    if(appData.ghHistory !== undefined) localStorage.setItem('ghHistory', JSON.stringify(appData.ghHistory));
+                    alert('Data imported successfully! The app will now reload.');
+                    location.reload();
+                } catch(e) { alert('Invalid JSON format.'); }
+            };
+
             // --- Utilities ---
             const formatBytes = (bytes, decimals = 2) => {
                 if (!+bytes) return '0 B';
@@ -305,6 +340,55 @@
                 return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
             };
             const getCdnUrl = rawUrl => rawUrl ? rawUrl.replace(/raw\.githubusercontent\.com\/([^\/]+)\/([^\/]+)\/([^\/]+)\//, 'cdn.jsdelivr.net/gh/$1/$2@$3/') : '';
+
+            // --- Check Shared Files from Service Worker ---
+            async function checkSharedFiles() {
+                if ('caches' in window) {
+                    try {
+                        const cache = await caches.open('shared-files');
+                        const countRes = await cache.match('/shared-file-count');
+                        const namesRes = await cache.match('/shared-file-names');
+                        
+                        if (countRes) {
+                            const count = parseInt(await countRes.text());
+                            const names = namesRes ? await namesRes.json() : [];
+                            const dataTransfer = new DataTransfer();
+                            
+                            for (let i = 0; i < count; i++) {
+                                const res = await cache.match(`/shared-file-${i}`);
+                                if (res) {
+                                    const blob = await res.blob();
+                                    let originalName = names[i];
+                                    let ext = blob.type ? blob.type.split('/')[1] : 'bin';
+                                    
+                                    if (ext.includes(';')) ext = ext.split(';')[0];
+                                    
+                                    if (!originalName || originalName === 'blob' || originalName === 'image.jpg') {
+                                        originalName = `shared_${Date.now()}.${ext}`;
+                                    } else if (!originalName.includes('.')) {
+                                        originalName = `${originalName}.${ext}`;
+                                    }
+                                    
+                                    const file = new File([blob], originalName, { type: blob.type });
+                                    dataTransfer.items.add(file);
+                                    await cache.delete(`/shared-file-${i}`);
+                                }
+                            }
+                            
+                            await cache.delete('/shared-file-count');
+                            if (namesRes) await cache.delete('/shared-file-names'); 
+                            
+                            if (dataTransfer.files.length > 0) {
+                                DOM.fileInput.files = dataTransfer.files;
+                                DOM.statusMsg.innerText = `${dataTransfer.files.length} shared file(s) ready!`;
+                                processSelectedFiles(); // Trigger preview queue
+                            }
+                        }
+                    } catch (e) {
+                        console.error("Error reading shared files from cache:", e);
+                    }
+                }
+            }
 
             // --- Compression Logic ---
             DOM.compCb.addEventListener('change', e => {
@@ -347,7 +431,6 @@
                 for (let file of files) {
                     if (useCompression && file.type.startsWith('image/') && file.type !== 'image/gif') {
                         const compressedBlob = await compressImage(file, quality);
-                        // Make blob behave like a file for upload logic
                         compressedBlob.name = file.name.replace(/\.[^/.]+$/, "") + ".jpg"; 
                         processedUploadFiles.push(compressedBlob);
 
@@ -619,6 +702,8 @@
                 } catch(e) { alert('Move failed.'); DOM.managerStatus.innerText = ''; }
             };
 
+            // Call on load
+            checkSharedFiles();
             renderHistory();
         });
     </script>
