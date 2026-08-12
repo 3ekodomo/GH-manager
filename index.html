@@ -39,19 +39,22 @@
         }
         .container { max-width: 800px; margin: 0 auto; }
         header { text-align: center; margin-bottom: 30px; }
+        
+        .header-actions {
+            display: flex; justify-content: center; gap: 10px; margin-top: 15px; align-items: center;
+        }
+        .header-btn {
+            padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border);
+            background: var(--card-bg); color: var(--text); cursor: pointer; font-size: 14px;
+        }
 
         /* --- Inputs and Selectors --- */
-        input[type="text"], input[type="password"], input[type="file"], select {
-            width: 100%;
-            padding: 10px;
-            margin-bottom: 10px;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            box-sizing: border-box;
-            background-color: var(--card-bg);
-            color: var(--text);
+        input[type="text"], input[type="password"], input[type="file"], select, textarea {
+            width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid var(--border);
+            border-radius: 6px; box-sizing: border-box; background-color: var(--card-bg); color: var(--text);
         }
-        #theme-selector { width: auto; display: inline-block; padding: 8px; cursor: pointer; }
+        #theme-selector { width: auto; display: inline-block; padding: 8px; cursor: pointer; margin-bottom: 0; }
+        textarea { resize: vertical; font-family: monospace; font-size: 12px; }
 
         /* --- Tab Navigation --- */
         .tab-nav { display: flex; gap: 10px; margin-bottom: 20px; }
@@ -86,11 +89,23 @@
             display: flex; background: var(--card-bg); border: 1px solid var(--border);
             border-radius: 6px; padding: 15px; margin-bottom: 15px; gap: 15px; align-items: center;
         }
+        
+        .history-left-col {
+            display: flex; flex-direction: column; width: 100px; min-width: 100px; gap: 5px; align-items: center;
+        }
         .history-thumb {
-            width: 100px; height: 100px; min-width: 100px; object-fit: cover; border-radius: 4px;
+            width: 100px; height: 100px; object-fit: cover; border-radius: 4px;
             cursor: pointer; border: 1px solid var(--border); display: flex; align-items: center;
             justify-content: center; background-color: var(--bg-color); font-weight: bold; overflow: hidden;
         }
+        .history-filename {
+            font-size: 11px; width: 100%; text-align: center; white-space: nowrap; 
+            overflow: hidden; text-overflow: ellipsis; text-transform: lowercase; font-weight: 600;
+        }
+        .history-filesize {
+            font-size: 10px; color: #888; text-align: center;
+        }
+
         .history-details { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; }
         .history-details label { font-size: 12px; margin-bottom: 3px; font-weight: 600; }
         .history-details input { font-family: monospace; font-size: 12px; margin-bottom: 8px; cursor: pointer; }
@@ -149,11 +164,14 @@
     <div class="container">
         <header>
             <h1>GH Uploader</h1>
-            <select id="theme-selector">
-                <option value="light">Light Mode</option>
-                <option value="dark">Dark Mode</option>
-                <option value="black">Amoled Black</option>
-            </select>
+            <div class="header-actions">
+                <select id="theme-selector">
+                    <option value="light">Light Mode</option>
+                    <option value="dark">Dark Mode</option>
+                    <option value="black">Amoled Black</option>
+                </select>
+                <button id="import-export-btn" class="header-btn">Data ⚙️</button>
+            </div>
         </header>
 
         <section class="config-section">
@@ -215,6 +233,20 @@
         </div>
     </div>
 
+    <!-- IMPORT/EXPORT MODAL -->
+    <div id="data-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeDataModal()">&times;</span>
+            <h2 style="margin-top: 0;">Import / Export Data</h2>
+            <p style="font-size: 12px; color: #888;">Copy this JSON to backup your config and history, or paste valid JSON here and tap Import to restore your setup.</p>
+            <textarea id="data-textarea" rows="10"></textarea>
+            <div class="action-buttons">
+                <button class="primary-btn" onclick="importData()" style="padding: 10px; font-size: 14px;">Import & Save</button>
+                <button class="primary-btn" onclick="copyDataText()" style="padding: 10px; font-size: 14px; border-color: #0969da; color: #0969da;">Copy JSON</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             // --- Service Worker ---
@@ -242,8 +274,9 @@
             const refreshDirBtn = document.getElementById('refresh-dir-btn');
             const managerStatus = document.getElementById('manager-status');
             const repoFileList = document.getElementById('repo-file-list');
+            const importExportBtn = document.getElementById('import-export-btn');
 
-            let currentRepoFiles = []; // Stores fetched files for local sorting
+            let currentRepoFiles = [];
 
             // --- Tabs ---
             tabUploadBtn.addEventListener('click', () => {
@@ -284,6 +317,13 @@
             checkSharedFiles();
 
             // --- Helpers ---
+            function formatBytes(bytes, decimals = 2) {
+                if (!+bytes) return '0 Bytes';
+                const k = 1024, dm = decimals < 0 ? 0 : decimals, sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+            }
+
             function getExtensionFromMime(mimeType, filename = '') {
                 if (filename.includes('.')) return filename.split('.').pop();
                 const mimeMap = {
@@ -373,7 +413,7 @@
                         const data = await response.json();
                         if (response.ok) {
                             successCount++;
-                            saveToHistory(getCdnUrl(data.content.download_url), file.type, fileName);
+                            saveToHistory(getCdnUrl(data.content.download_url), file.type, fileName, file.size);
                         } else console.error(`Error uploading ${file.name}:`, data.message);
                     } catch (error) { console.error(`Catch error on ${file.name}:`, error); }
                 }
@@ -382,9 +422,9 @@
                 uploadBtn.disabled = false; fileInput.value = ''; renderHistory();
             });
 
-            function saveToHistory(url, type, filename = '') {
+            function saveToHistory(url, type, filename = '', size = 0) {
                 let history = JSON.parse(localStorage.getItem('ghHistory')) || [];
-                history.unshift({ url, type, filename, date: new Date().toLocaleString() });
+                history.unshift({ url, type, filename, size, date: new Date().toLocaleString() });
                 localStorage.setItem('ghHistory', JSON.stringify(history));
             }
 
@@ -394,6 +434,7 @@
                 history.forEach((item, index) => {
                     const div = document.createElement('div');
                     div.className = 'history-item';
+                    
                     const isImage = item.type.startsWith('image/');
                     let extLabel = item.url.split('.').pop().toUpperCase();
                     if(extLabel.length > 4 || extLabel.includes('/')) extLabel = 'FILE';
@@ -401,10 +442,19 @@
                     const thumb = isImage 
                         ? `<img src="${item.url}" class="history-thumb" onclick="window.open('${item.url}', '_blank')" alt="thumbnail">` 
                         : `<div class="history-thumb" onclick="window.open('${item.url}', '_blank')">${extLabel}</div>`;
+                    
                     const markdownCode = isImage ? `![Image](${item.url})` : `[File](${item.url})`;
+                    
+                    // Format display name and size for the new layout
+                    const displayName = (item.filename || item.url.split('/').pop()).toLowerCase();
+                    const displaySize = item.size ? formatBytes(item.size) : 'N/A';
 
                     div.innerHTML = `
-                        ${thumb}
+                        <div class="history-left-col">
+                            ${thumb}
+                            <div class="history-filename" title="${displayName}">${displayName}</div>
+                            <div class="history-filesize">${displaySize}</div>
+                        </div>
                         <div class="history-details">
                             <label>Direct Link: (Tap to copy)</label>
                             <input type="text" value="${item.url}" readonly onclick="copyToClipboard(this)">
@@ -416,6 +466,49 @@
                     historyList.appendChild(div);
                 });
             }
+
+            // --- Import/Export Logic ---
+            importExportBtn.addEventListener('click', () => {
+                const appData = {
+                    ghToken: localStorage.getItem('ghToken') || '',
+                    ghRepo: localStorage.getItem('ghRepo') || '',
+                    ghFolder: localStorage.getItem('ghFolder') || '',
+                    ghTheme: localStorage.getItem('ghTheme') || 'light',
+                    ghHistory: JSON.parse(localStorage.getItem('ghHistory')) || []
+                };
+                document.getElementById('data-textarea').value = JSON.stringify(appData, null, 2);
+                document.getElementById('data-modal').style.display = 'block';
+            });
+
+            window.closeDataModal = function() {
+                document.getElementById('data-modal').style.display = 'none';
+            }
+
+            window.copyDataText = function() {
+                const textarea = document.getElementById('data-textarea');
+                textarea.select();
+                navigator.clipboard.writeText(textarea.value);
+                alert('JSON Data copied to clipboard!');
+            }
+
+            window.importData = function() {
+                try {
+                    const textarea = document.getElementById('data-textarea');
+                    const appData = JSON.parse(textarea.value);
+                    
+                    if(appData.ghToken !== undefined) localStorage.setItem('ghToken', appData.ghToken);
+                    if(appData.ghRepo !== undefined) localStorage.setItem('ghRepo', appData.ghRepo);
+                    if(appData.ghFolder !== undefined) localStorage.setItem('ghFolder', appData.ghFolder);
+                    if(appData.ghTheme !== undefined) localStorage.setItem('ghTheme', appData.ghTheme);
+                    if(appData.ghHistory !== undefined) localStorage.setItem('ghHistory', JSON.stringify(appData.ghHistory));
+                    
+                    alert('Data imported successfully! The app will now reload.');
+                    location.reload();
+                } catch(e) {
+                    alert('Invalid JSON format. Please check the pasted text and try again.');
+                }
+            }
+
 
             // --- File Manager UI Logic ---
             refreshDirBtn.addEventListener('click', loadRepoFiles);
@@ -440,7 +533,7 @@
                     managerStatus.innerText = '';
                     
                     currentRepoFiles = Array.isArray(files) ? files : [files];
-                    renderRepoList(); // Call render function which handles sorting
+                    renderRepoList(); 
                 } catch (error) { managerStatus.innerText = error.message; }
             }
 
@@ -448,20 +541,16 @@
                 repoFileList.innerHTML = '';
                 const sortType = sortFilesDropdown.value;
 
-                // 1. Separate Folders and Files
                 let folders = currentRepoFiles.filter(f => f.type === 'dir');
                 let files = currentRepoFiles.filter(f => f.type === 'file');
 
-                // 2. Always sort folders A-Z
                 folders.sort((a, b) => a.name.localeCompare(b.name));
 
-                // 3. Sort files based on dropdown choice
                 if (sortType === 'name-asc') files.sort((a, b) => a.name.localeCompare(b.name));
                 else if (sortType === 'name-desc') files.sort((a, b) => b.name.localeCompare(a.name));
                 else if (sortType === 'size-asc') files.sort((a, b) => a.size - b.size);
                 else if (sortType === 'size-desc') files.sort((a, b) => b.size - a.size);
 
-                // 4. Combine (Folders pinned to top)
                 const sortedArray = [...folders, ...files];
 
                 sortedArray.forEach(file => {
@@ -483,7 +572,6 @@
                             : `<div class="manager-thumb" onclick="${fileClickHandler}">${extLabel}</div>`)
                         : `<div class="manager-thumb" onclick="${fileClickHandler}">DIR</div>`;
 
-                    // Generate 3-dot Kebab menu for Files, or basic Open button for Dirs
                     let actionHtml = '';
                     if (isFile) {
                         actionHtml = `
@@ -504,7 +592,7 @@
                         ${thumbHtml}
                         <div class="repo-item-info" onclick="${fileClickHandler}">
                             <div class="repo-item-name">${file.name}</div>
-                            <div class="repo-item-type">${file.type} ${isFile ? `(${(file.size / 1024).toFixed(1)} KB)` : ''}</div>
+                            <div class="repo-item-type">${file.type} ${isFile ? `(${formatBytes(file.size)})` : ''}</div>
                         </div>
                         ${actionHtml}
                     `;
@@ -530,14 +618,13 @@
 
             // Manage Dropdown Menu
             window.toggleMenu = function(sha, event) {
-                event.stopPropagation(); // Prevents row click
+                event.stopPropagation();
                 document.querySelectorAll('.dropdown-menu').forEach(m => {
                     if (m.id !== `menu-${sha}`) m.classList.remove('show');
                 });
                 document.getElementById(`menu-${sha}`).classList.toggle('show');
             }
 
-            // Close dropdowns if clicking anywhere else
             document.addEventListener('click', () => {
                 document.querySelectorAll('.dropdown-menu').forEach(m => m.classList.remove('show'));
             });
@@ -648,4 +735,5 @@
     </script>
 </body>
 </html>
+
 
