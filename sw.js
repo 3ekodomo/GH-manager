@@ -1,18 +1,20 @@
-const CACHE_NAME = 'gh-uploader-v2';
+const CACHE_NAME = 'gh-uploader-v3';
 
 self.addEventListener('install', (event) => {
-    self.skipWaiting(); // Forces the new service worker to activate immediately
+    // Force the waiting service worker to become the active service worker.
+    self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
+    // Claim any clients immediately so the new SW takes over.
     event.waitUntil(clients.claim());
 });
 
 self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
 
-    // Intercept the Share Target POST request from Android
-    if (event.request.method === 'POST' && url.pathname.includes('/share')) {
+    // Intercept the Share Target POST request reliably using a query parameter
+    if (event.request.method === 'POST' && url.search.includes('share=true')) {
         event.respondWith((async () => {
             try {
                 const formData = await event.request.formData();
@@ -38,7 +40,7 @@ self.addEventListener('fetch', (event) => {
                 console.error("Error processing shared files:", error);
             }
 
-            // Redirect back to the main app page to process the upload
+            // Redirect back to the clean URL
             return Response.redirect('./index.html', 303);
         })());
         return;
