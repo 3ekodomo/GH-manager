@@ -514,7 +514,8 @@
                 history.forEach((item, index) => {
                     const isImage = item.type.startsWith('image/');
                     const ext = item.url.split('.').pop().toUpperCase().substring(0,4);
-                    const thumb = isImage ? `<img src="${item.url}" class="history-thumb" onclick="window.open('${item.url}')">` : `<div class="history-thumb">${ext}</div>`;
+                    // FIX APPLIED HERE: Added onclick event to the non-image div thumbnail
+                    const thumb = isImage ? `<img src="${item.url}" class="history-thumb" onclick="window.open('${item.url}')">` : `<div class="history-thumb" onclick="window.open('${item.url}')">${ext}</div>`;
                     const mkd = isImage ? `![Image](${item.url})` : `[File](${item.url})`;
                     const name = (item.filename || item.url.split('/').pop()).toLowerCase();
 
@@ -567,7 +568,7 @@
                     const clickAction = isFile ? `window.open('${cdnUrl}')` : `document.getElementById('manager-path').value = '${file.path}'; document.getElementById('refresh-dir-btn').click();`;
                     
                     const thumb = isFile 
-                        ? (isImage ? `<img src="${cdnUrl}" class="manager-thumb" onclick="${clickAction}">` : `<div class="manager-thumb">${file.name.split('.').pop().toUpperCase().substring(0,4)}</div>`)
+                        ? (isImage ? `<img src="${cdnUrl}" class="manager-thumb" onclick="${clickAction}">` : `<div class="manager-thumb" onclick="${clickAction}">${file.name.split('.').pop().toUpperCase().substring(0,4)}</div>`)
                         : `<div class="manager-thumb" onclick="${clickAction}">DIR</div>`;
 
                     const div = document.createElement('div');
@@ -709,3 +710,4 @@
     </script>
 </body>
 </html>
+
