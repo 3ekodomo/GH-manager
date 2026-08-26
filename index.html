@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://api.github.com;">
     <title>GH Uploader</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#f6f8fa" id="theme-meta">
@@ -300,8 +301,9 @@
 
             // --- Data Button Modal ---
             DOM.importExportBtn.addEventListener('click', () => {
+                const rawToken = localStorage.getItem('ghToken') || '';
                 const appData = {
-                    ghToken: localStorage.getItem('ghToken') || '',
+                    ghToken: rawToken ? '***HIDDEN***' : '',
                     ghRepo: localStorage.getItem('ghRepo') || '',
                     ghFolder: localStorage.getItem('ghFolder') || '',
                     ghTheme: localStorage.getItem('ghTheme') || 'light',
@@ -322,7 +324,7 @@
             window.importData = () => {
                 try {
                     const appData = JSON.parse(document.getElementById('data-textarea').value);
-                    if(appData.ghToken !== undefined) localStorage.setItem('ghToken', appData.ghToken);
+                    if(appData.ghToken !== undefined && appData.ghToken !== '***HIDDEN***') localStorage.setItem('ghToken', appData.ghToken);
                     if(appData.ghRepo !== undefined) localStorage.setItem('ghRepo', appData.ghRepo);
                     if(appData.ghFolder !== undefined) localStorage.setItem('ghFolder', appData.ghFolder);
                     if(appData.ghTheme !== undefined) localStorage.setItem('ghTheme', appData.ghTheme);
@@ -333,6 +335,20 @@
             };
 
             // --- Utilities ---
+            const escapeHTML = str => {
+                if (!str) return '';
+                return String(str).replace(/&/g, '&amp;')
+                                  .replace(/</g, '&lt;')
+                                  .replace(/>/g, '&gt;')
+                                  .replace(/"/g, '&quot;')
+                                  .replace(/'/g, '&#39;');
+            };
+            const escapeJS = str => {
+                if (!str) return '';
+                return String(str).replace(/\\/g, '\\\\').replace(/'/g, '\\\'').replace(/"/g, '\\"');
+            };
+            const escapeHTMLAndJS = str => escapeHTML(escapeJS(str));
+
             const formatBytes = (bytes, decimals = 2) => {
                 if (!+bytes) return '0 B';
                 const k = 1024, dm = decimals < 0 ? 0 : decimals, sizes = ['B', 'KB', 'MB', 'GB'];
@@ -439,10 +455,10 @@
 
                         DOM.compQueue.innerHTML += `
                             <div class="compression-queue-item">
-                                <span style="width: 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${file.name}</span>
+                                <span style="width: 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHTML(file.name)}</span>
                                 <span>${formatBytes(file.size)} &rarr; ${formatBytes(compressedBlob.size)}</span>
                                 <span class="savings-badge">-${savings}%</span>
-                                <button class="btn-preview" onclick="showCompressedPreview('${objUrl}')">Preview</button>
+                                <button class="btn-preview" onclick="showCompressedPreview('${escapeHTMLAndJS(objUrl)}')">Preview</button>
                             </div>
                         `;
                     } else {
@@ -513,18 +529,20 @@
                 let history = JSON.parse(localStorage.getItem('ghHistory')) || [];
                 history.forEach((item, index) => {
                     const isImage = item.type.startsWith('image/');
-                    const ext = item.url.split('.').pop().toUpperCase().substring(0,4);
+                    const safeUrl = escapeHTML(item.url);
+                    const safeUrlJS = escapeHTMLAndJS(item.url);
+                    const ext = escapeHTML(item.url.split('.').pop().toUpperCase().substring(0,4));
                     // FIX APPLIED HERE: Added onclick event to the non-image div thumbnail
-                    const thumb = isImage ? `<img src="${item.url}" class="history-thumb" onclick="window.open('${item.url}')">` : `<div class="history-thumb" onclick="window.open('${item.url}')">${ext}</div>`;
-                    const mkd = isImage ? `![Image](${item.url})` : `[File](${item.url})`;
-                    const name = (item.filename || item.url.split('/').pop()).toLowerCase();
+                    const thumb = isImage ? `<img src="${safeUrl}" class="history-thumb" onclick="window.open('${safeUrlJS}')">` : `<div class="history-thumb" onclick="window.open('${safeUrlJS}')">${ext}</div>`;
+                    const mkd = escapeHTML(isImage ? `![Image](${item.url})` : `[File](${item.url})`);
+                    const name = escapeHTML((item.filename || item.url.split('/').pop()).toLowerCase());
 
                     const div = document.createElement('div');
                     div.className = 'history-item';
                     div.innerHTML = `
                         <div class="history-left-col">${thumb}<div class="history-filename" title="${name}">${name}</div><div class="history-filesize">${formatBytes(item.size)}</div></div>
                         <div class="history-details">
-                            <label>Direct Link:</label><input type="text" value="${item.url}" readonly onclick="copyToClipboard(this)">
+                            <label>Direct Link:</label><input type="text" value="${safeUrl}" readonly onclick="copyToClipboard(this)">
                             <label>Markdown:</label><input type="text" value="${mkd}" readonly onclick="copyToClipboard(this)">
                             <button class="delete-btn" onclick="deleteHistoryItem(${index})">Remove</button>
                         </div>`;
@@ -565,29 +583,38 @@
                     const isFile = file.type === 'file';
                     const isImage = file.name.match(/\.(jpeg|jpg|gif|png|webp|svg)$/i);
                     const cdnUrl = file.download_url ? getCdnUrl(file.download_url) : '';
-                    const clickAction = isFile ? `window.open('${cdnUrl}')` : `document.getElementById('manager-path').value = '${file.path}'; document.getElementById('refresh-dir-btn').click();`;
+                    const safeCdnUrl = escapeHTML(cdnUrl);
+                    const safeCdnUrlJS = escapeHTMLAndJS(cdnUrl);
+                    const safeFilePath = escapeHTML(file.path);
+                    const safeFilePathJS = escapeHTMLAndJS(file.path);
+                    const safeFileName = escapeHTML(file.name);
+                    const safeExt = escapeHTML(file.name.split('.').pop().toUpperCase().substring(0,4));
+                    const safeSha = escapeHTML(file.sha);
+                    const safeShaJS = escapeHTMLAndJS(file.sha);
+
+                    const clickAction = isFile ? `window.open('${safeCdnUrlJS}')` : `document.getElementById('manager-path').value = '${safeFilePathJS}'; document.getElementById('refresh-dir-btn').click();`;
                     
                     const thumb = isFile 
-                        ? (isImage ? `<img src="${cdnUrl}" class="manager-thumb" onclick="${clickAction}">` : `<div class="manager-thumb" onclick="${clickAction}">${file.name.split('.').pop().toUpperCase().substring(0,4)}</div>`)
+                        ? (isImage ? `<img src="${safeCdnUrl}" class="manager-thumb" onclick="${clickAction}">` : `<div class="manager-thumb" onclick="${clickAction}">${safeExt}</div>`)
                         : `<div class="manager-thumb" onclick="${clickAction}">DIR</div>`;
 
                     const div = document.createElement('div');
                     div.className = 'repo-item';
                     
                     let actionHtml = isFile 
-                        ? `<div class="menu-container"><button class="kebab-btn" onclick="toggleMenu('${file.sha}', event)">&#8942;</button>
-                           <div id="menu-${file.sha}" class="dropdown-menu">
-                           <button onclick="openShareModal('${cdnUrl}', ${!!isImage})">Share</button>
-                           <button onclick="renameFile('${file.path}', '${file.sha}')">Move/Rename</button>
-                           <button class="delete-action" onclick="deleteRemoteFile('${file.path}', '${file.sha}')">Delete</button>
+                        ? `<div class="menu-container"><button class="kebab-btn" onclick="toggleMenu('${safeShaJS}', event)">&#8942;</button>
+                           <div id="menu-${safeSha}" class="dropdown-menu">
+                           <button onclick="openShareModal('${safeCdnUrlJS}', ${!!isImage})">Share</button>
+                           <button onclick="renameFile('${safeFilePathJS}', '${safeShaJS}')">Move/Rename</button>
+                           <button class="delete-action" onclick="deleteRemoteFile('${safeFilePathJS}', '${safeShaJS}')">Delete</button>
                            </div></div>`
                         : `<button class="btn-move" style="padding:4px 8px; font-size:12px; background:transparent;" onclick="${clickAction}">Open</button>`;
 
                     div.innerHTML = `
-                        <input type="checkbox" class="select-cb repo-file-cb" data-path="${file.path}" data-sha="${file.sha}">
+                        <input type="checkbox" class="select-cb repo-file-cb" data-path="${safeFilePath}" data-sha="${safeSha}">
                         ${thumb}
                         <div class="repo-item-info" onclick="${clickAction}">
-                            <div class="repo-item-name">${file.name}</div>
+                            <div class="repo-item-name">${safeFileName}</div>
                             <div class="repo-item-type">${file.type} ${isFile ? `(${formatBytes(file.size)})` : ''}</div>
                         </div>
                         ${actionHtml}
