@@ -83,7 +83,8 @@
         .savings-badge { background: #2ea44f; color: white; padding: 2px 6px; border-radius: 10px; font-weight: bold; }
 
         /* --- History Section --- */
-        .history-item { display: flex; background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px; padding: 15px; margin-bottom: 15px; gap: 15px; align-items: center; }
+        .history-item { display: flex; background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px; padding: 15px; margin-bottom: 15px; gap: 15px; align-items: center; transition: box-shadow 0.2s, transform 0.2s; }
+        .history-item:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); transform: translateY(-2px); }
         .history-left-col { display: flex; flex-direction: column; width: 100px; min-width: 100px; gap: 5px; align-items: center; }
         .history-thumb { width: 100px; height: 100px; object-fit: cover; border-radius: 4px; cursor: pointer; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; background-color: var(--bg-color); font-weight: bold; overflow: hidden; }
         .history-filename { font-size: 11px; width: 100%; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: lowercase; font-weight: 600; }
@@ -93,7 +94,8 @@
         .history-details input { font-family: monospace; font-size: 12px; margin-bottom: 8px; cursor: pointer; }
 
         /* --- Manager Section Styles --- */
-        .repo-item { display: flex; background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-bottom: 10px; align-items: center; justify-content: space-between; gap: 10px; }
+        .repo-item { display: flex; background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-bottom: 10px; align-items: center; justify-content: space-between; gap: 10px; transition: box-shadow 0.2s, transform 0.2s; }
+        .repo-item:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); transform: translateY(-2px); }
         .repo-item-info { flex-grow: 1; overflow: hidden; cursor: pointer; }
         .repo-item-name { font-weight: bold; font-size: 14px; word-break: break-all; }
         .repo-item-type { font-size: 11px; color: #888; text-transform: uppercase; }
@@ -340,6 +342,7 @@
                 return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
             };
             const getCdnUrl = rawUrl => rawUrl ? rawUrl.replace(/raw\.githubusercontent\.com\/([^\/]+)\/([^\/]+)\/([^\/]+)\//, 'cdn.jsdelivr.net/gh/$1/$2@$3/') : '';
+            const escapeHTML = str => str ? str.replace(/[&<>'"]/g, tag => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'}[tag] || tag)) : '';
 
             // --- Check Shared Files from Service Worker ---
             async function checkSharedFiles() {
@@ -524,15 +527,16 @@
                         thumb = `<div class="history-thumb" onclick="window.open('${item.url}')">${ext}</div>`;
                     }
 
-                    const mkd = isImage ? `![Image](${item.url})` : `[File](${item.url})`;
-                    const name = (item.filename || item.url.split('/').pop()).toLowerCase();
+                    const escapedUrl = escapeHTML(item.url);
+                    const mkd = escapeHTML(isImage ? `![Image](${item.url})` : `[File](${item.url})`);
+                    const name = escapeHTML((item.filename || item.url.split('/').pop()).toLowerCase());
 
                     const div = document.createElement('div');
                     div.className = 'history-item';
                     div.innerHTML = `
                         <div class="history-left-col">${thumb}<div class="history-filename" title="${name}">${name}</div><div class="history-filesize">${formatBytes(item.size)}</div></div>
                         <div class="history-details">
-                            <label>Direct Link:</label><input type="text" value="${item.url}" readonly onclick="copyToClipboard(this)">
+                            <label>Direct Link:</label><input type="text" value="${escapedUrl}" readonly onclick="copyToClipboard(this)">
                             <label>Markdown:</label><input type="text" value="${mkd}" readonly onclick="copyToClipboard(this)">
                             <button class="delete-btn" onclick="deleteHistoryItem(${index})">Remove</button>
                         </div>`;
@@ -588,23 +592,27 @@
                         thumb = `<div class="manager-thumb" onclick="${clickAction}">${file.name.split('.').pop().toUpperCase().substring(0,4)}</div>`;
                     }
 
+                    const escapedName = escapeHTML(file.name);
+                    const escapedPath = escapeHTML(file.path);
+                    const escapedSha = escapeHTML(file.sha);
+
                     const div = document.createElement('div');
                     div.className = 'repo-item';
                     
                     let actionHtml = isFile 
-                        ? `<div class="menu-container"><button class="kebab-btn" onclick="toggleMenu('${file.sha}', event)">&#8942;</button>
-                           <div id="menu-${file.sha}" class="dropdown-menu">
-                           <button onclick="openShareModal('${cdnUrl}', '${fileType}')">Share</button>
-                           <button onclick="renameFile('${file.path}', '${file.sha}')">Move/Rename</button>
-                           <button class="delete-action" onclick="deleteRemoteFile('${file.path}', '${file.sha}')">Delete</button>
+                        ? `<div class="menu-container"><button class="kebab-btn" onclick="toggleMenu('${escapedSha}', event)">&#8942;</button>
+                           <div id="menu-${escapedSha}" class="dropdown-menu">
+                           <button onclick="openShareModal('${escapeHTML(cdnUrl)}', '${fileType}')">Share</button>
+                           <button onclick="renameFile('${escapedPath}', '${escapedSha}')">Move/Rename</button>
+                           <button class="delete-action" onclick="deleteRemoteFile('${escapedPath}', '${escapedSha}')">Delete</button>
                            </div></div>`
                         : `<button class="btn-move" style="padding:4px 8px; font-size:12px; background:transparent;" onclick="${clickAction}">Open</button>`;
 
                     div.innerHTML = `
-                        <input type="checkbox" class="select-cb repo-file-cb" data-path="${file.path}" data-sha="${file.sha}">
+                        <input type="checkbox" class="select-cb repo-file-cb" data-path="${escapedPath}" data-sha="${escapedSha}">
                         ${thumb}
                         <div class="repo-item-info" onclick="${clickAction}">
-                            <div class="repo-item-name">${file.name}</div>
+                            <div class="repo-item-name">${escapedName}</div>
                             <div class="repo-item-type">${file.type} ${isFile ? `(${formatBytes(file.size)})` : ''}</div>
                         </div>
                         ${actionHtml}
