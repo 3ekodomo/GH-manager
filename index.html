@@ -38,7 +38,7 @@
             padding-bottom: 80px;
             transition: background-color 0.3s, color 0.3s;
         }
-        .container { max-width: 800px; margin: 0 auto; }
+        .container { max-width: 1200px; margin: 0 auto; }
         header { text-align: center; margin-bottom: 30px; }
         
         .header-actions { display: flex; justify-content: center; gap: 10px; margin-top: 15px; align-items: center; }
@@ -83,7 +83,8 @@
         .savings-badge { background: #2ea44f; color: white; padding: 2px 6px; border-radius: 10px; font-weight: bold; }
 
         /* --- History Section --- */
-        .history-item { display: flex; background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px; padding: 15px; margin-bottom: 15px; gap: 15px; align-items: center; }
+        #history-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 15px; }
+        .history-item { display: flex; background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px; padding: 15px; gap: 15px; align-items: center; }
         .history-left-col { display: flex; flex-direction: column; width: 100px; min-width: 100px; gap: 5px; align-items: center; }
         .history-thumb { width: 100px; height: 100px; object-fit: cover; border-radius: 4px; cursor: pointer; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; background-color: var(--bg-color); font-weight: bold; overflow: hidden; }
         .history-filename { font-size: 11px; width: 100%; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: lowercase; font-weight: 600; }
@@ -93,7 +94,8 @@
         .history-details input { font-family: monospace; font-size: 12px; margin-bottom: 8px; cursor: pointer; }
 
         /* --- Manager Section Styles --- */
-        .repo-item { display: flex; background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-bottom: 10px; align-items: center; justify-content: space-between; gap: 10px; }
+        #repo-file-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 15px; }
+        .repo-item { display: flex; background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px; align-items: center; justify-content: space-between; gap: 10px; }
         .repo-item-info { flex-grow: 1; overflow: hidden; cursor: pointer; }
         .repo-item-name { font-weight: bold; font-size: 14px; word-break: break-all; }
         .repo-item-type { font-size: 11px; color: #888; text-transform: uppercase; }
@@ -333,6 +335,10 @@
             };
 
             // --- Utilities ---
+            const escapeHTML = str => str ? str.replace(/[&<>'"]/g, tag => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+            }[tag])) : str;
+
             const formatBytes = (bytes, decimals = 2) => {
                 if (!+bytes) return '0 B';
                 const k = 1024, dm = decimals < 0 ? 0 : decimals, sizes = ['B', 'KB', 'MB', 'GB'];
@@ -439,10 +445,10 @@
 
                         DOM.compQueue.innerHTML += `
                             <div class="compression-queue-item">
-                                <span style="width: 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${file.name}</span>
+                                <span style="width: 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHTML(file.name)}</span>
                                 <span>${formatBytes(file.size)} &rarr; ${formatBytes(compressedBlob.size)}</span>
                                 <span class="savings-badge">-${savings}%</span>
-                                <button class="btn-preview" onclick="showCompressedPreview('${objUrl}')">Preview</button>
+                                <button class="btn-preview" onclick="showCompressedPreview('${escapeHTML(objUrl)}')">Preview</button>
                             </div>
                         `;
                     } else {
@@ -452,7 +458,7 @@
             }
 
             window.showCompressedPreview = function(url) {
-                document.getElementById('image-preview-container').innerHTML = `<img src="${url}">`;
+                document.getElementById('image-preview-container').innerHTML = `<img src="${escapeHTML(url)}">`;
                 document.getElementById('preview-modal').style.display = 'block';
             }
             window.closePreviewModal = () => document.getElementById('preview-modal').style.display = 'none';
@@ -517,23 +523,24 @@
                     const isAudio = item.type.startsWith('audio/') || item.url.match(/\.(mp3|wav|ogg|m4a)$/i);
                     const ext = item.url.split('.').pop().toUpperCase().substring(0,4);
 
+                    const safeUrl = escapeHTML(item.url);
+                    const safeName = escapeHTML((item.filename || item.url.split('/').pop()).toLowerCase());
+                    const safeMkd = escapeHTML(isImage ? `![Image](${item.url})` : `[File](${item.url})`);
+
                     let thumb;
                     if (isImage) {
-                        thumb = `<img src="${item.url}" class="history-thumb" onclick="window.open('${item.url}')">`;
+                        thumb = `<img src="${safeUrl}" class="history-thumb" onclick="window.open('${safeUrl}')">`;
                     } else {
-                        thumb = `<div class="history-thumb" onclick="window.open('${item.url}')">${ext}</div>`;
+                        thumb = `<div class="history-thumb" onclick="window.open('${safeUrl}')">${ext}</div>`;
                     }
-
-                    const mkd = isImage ? `![Image](${item.url})` : `[File](${item.url})`;
-                    const name = (item.filename || item.url.split('/').pop()).toLowerCase();
 
                     const div = document.createElement('div');
                     div.className = 'history-item';
                     div.innerHTML = `
-                        <div class="history-left-col">${thumb}<div class="history-filename" title="${name}">${name}</div><div class="history-filesize">${formatBytes(item.size)}</div></div>
+                        <div class="history-left-col">${thumb}<div class="history-filename" title="${safeName}">${safeName}</div><div class="history-filesize">${formatBytes(item.size)}</div></div>
                         <div class="history-details">
-                            <label>Direct Link:</label><input type="text" value="${item.url}" readonly onclick="copyToClipboard(this)">
-                            <label>Markdown:</label><input type="text" value="${mkd}" readonly onclick="copyToClipboard(this)">
+                            <label>Direct Link:</label><input type="text" value="${safeUrl}" readonly onclick="copyToClipboard(this)">
+                            <label>Markdown:</label><input type="text" value="${safeMkd}" readonly onclick="copyToClipboard(this)">
                             <button class="delete-btn" onclick="deleteHistoryItem(${index})">Remove</button>
                         </div>`;
                     DOM.historyList.appendChild(div);
@@ -579,32 +586,38 @@
                     const cdnUrl = file.download_url ? getCdnUrl(file.download_url) : '';
                     const clickAction = isFile ? `window.open('${cdnUrl}')` : `document.getElementById('manager-path').value = '${file.path}'; document.getElementById('refresh-dir-btn').click();`;
                     
+                    const safeUrl = escapeHTML(cdnUrl);
+                    const safeName = escapeHTML(file.name);
+                    const safePath = escapeHTML(file.path);
+                    const safeSha = escapeHTML(file.sha);
+                    const safeClickAction = escapeHTML(clickAction);
+
                     let thumb;
                     if (!isFile) {
                         thumb = `<div class="manager-thumb" onclick="${clickAction}">DIR</div>`;
                     } else if (isImage) {
-                        thumb = `<img src="${cdnUrl}" class="manager-thumb" onclick="${clickAction}">`;
+                        thumb = `<img src="${safeUrl}" class="manager-thumb" onclick="${clickAction}">`;
                     } else {
-                        thumb = `<div class="manager-thumb" onclick="${clickAction}">${file.name.split('.').pop().toUpperCase().substring(0,4)}</div>`;
+                        thumb = `<div class="manager-thumb" onclick="${clickAction}">${safeName.split('.').pop().toUpperCase().substring(0,4)}</div>`;
                     }
 
                     const div = document.createElement('div');
                     div.className = 'repo-item';
                     
                     let actionHtml = isFile 
-                        ? `<div class="menu-container"><button class="kebab-btn" onclick="toggleMenu('${file.sha}', event)">&#8942;</button>
-                           <div id="menu-${file.sha}" class="dropdown-menu">
-                           <button onclick="openShareModal('${cdnUrl}', '${fileType}')">Share</button>
-                           <button onclick="renameFile('${file.path}', '${file.sha}')">Move/Rename</button>
-                           <button class="delete-action" onclick="deleteRemoteFile('${file.path}', '${file.sha}')">Delete</button>
+                        ? `<div class="menu-container"><button class="kebab-btn" onclick="toggleMenu('${safeSha}', event)">&#8942;</button>
+                           <div id="menu-${safeSha}" class="dropdown-menu">
+                           <button onclick="openShareModal('${safeUrl}', '${fileType}')">Share</button>
+                           <button onclick="renameFile('${safePath}', '${safeSha}')">Move/Rename</button>
+                           <button class="delete-action" onclick="deleteRemoteFile('${safePath}', '${safeSha}')">Delete</button>
                            </div></div>`
                         : `<button class="btn-move" style="padding:4px 8px; font-size:12px; background:transparent;" onclick="${clickAction}">Open</button>`;
 
                     div.innerHTML = `
-                        <input type="checkbox" class="select-cb repo-file-cb" data-path="${file.path}" data-sha="${file.sha}">
+                        <input type="checkbox" class="select-cb repo-file-cb" data-path="${safePath}" data-sha="${safeSha}">
                         ${thumb}
                         <div class="repo-item-info" onclick="${clickAction}">
-                            <div class="repo-item-name">${file.name}</div>
+                            <div class="repo-item-name">${safeName}</div>
                             <div class="repo-item-type">${file.type} ${isFile ? `(${formatBytes(file.size)})` : ''}</div>
                         </div>
                         ${actionHtml}
@@ -705,15 +718,17 @@
                 document.getElementById('share-link').value = url;
                 document.getElementById('share-markdown').value = fileType === 'image' ? `![Image](${url})` : `[File](${url})`;
 
+                const safeUrl = escapeHTML(url);
+
                 let previewHtml = '';
                 if (fileType === 'image') {
-                    previewHtml = `<img src="${url}">`;
+                    previewHtml = `<img src="${safeUrl}">`;
                 } else if (fileType === 'video') {
-                    previewHtml = `<video controls src="${url}" style="max-width: 100%; max-height: 400px;"></video>`;
+                    previewHtml = `<video controls src="${safeUrl}" style="max-width: 100%; max-height: 400px;"></video>`;
                 } else if (fileType === 'audio') {
-                    previewHtml = `<audio controls src="${url}" style="width: 100%; margin-top: 20px; margin-bottom: 20px;"></audio>`;
+                    previewHtml = `<audio controls src="${safeUrl}" style="width: 100%; margin-top: 20px; margin-bottom: 20px;"></audio>`;
                 } else {
-                    previewHtml = `<div style="padding:40px; font-weight:bold; font-size:24px; border:2px dashed var(--border);">${url.split('.').pop().toUpperCase()}</div>`;
+                    previewHtml = `<div style="padding:40px; font-weight:bold; font-size:24px; border:2px dashed var(--border);">${safeUrl.split('.').pop().toUpperCase()}</div>`;
                 }
                 document.getElementById('share-preview').innerHTML = previewHtml;
             }
