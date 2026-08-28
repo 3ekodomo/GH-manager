@@ -520,10 +520,6 @@
                     let thumb;
                     if (isImage) {
                         thumb = `<img src="${item.url}" class="history-thumb" onclick="window.open('${item.url}')">`;
-                    } else if (isVideo) {
-                        thumb = `<video src="${item.url}" class="history-thumb" controls style="object-fit: contain; cursor: default; background: #000;"></video>`;
-                    } else if (isAudio) {
-                        thumb = `<audio src="${item.url}" controls style="width: 100px; height: 100px;"></audio>`;
                     } else {
                         thumb = `<div class="history-thumb" onclick="window.open('${item.url}')">${ext}</div>`;
                     }
@@ -588,10 +584,6 @@
                         thumb = `<div class="manager-thumb" onclick="${clickAction}">DIR</div>`;
                     } else if (isImage) {
                         thumb = `<img src="${cdnUrl}" class="manager-thumb" onclick="${clickAction}">`;
-                    } else if (isVideo) {
-                        thumb = `<video src="${cdnUrl}" class="manager-thumb" controls style="object-fit: contain; cursor: default; background: #000;"></video>`;
-                    } else if (isAudio) {
-                        thumb = `<audio src="${cdnUrl}" controls style="width: 40px; height: 40px; border-radius: 4px;"></audio>`;
                     } else {
                         thumb = `<div class="manager-thumb" onclick="${clickAction}">${file.name.split('.').pop().toUpperCase().substring(0,4)}</div>`;
                     }
