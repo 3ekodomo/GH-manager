@@ -19,7 +19,7 @@
     }
   ],
   "share_target": {
-    "action": "./index.html?share=true",
+    "action": "./index.html?share-target",
     "method": "POST",
     "enctype": "multipart/form-data",
     "params": {
@@ -28,9 +28,12 @@
       "files": [
         {
           "name": "shared_files",
-          "accept": ["*/*"]
+          "accept": [
+            "*/*"
+          ]
         }
       ]
     }
-  }
+  },
+  "scope": "./"
 }

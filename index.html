@@ -252,7 +252,11 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
+                    .then(reg => reg.update())
+                    .catch(err => console.error('Service worker registration failed:', err));
+            }
 
             const DOM = {
                 token: document.getElementById('gh-token'), repo: document.getElementById('gh-repo'),
@@ -348,51 +352,65 @@
             const getCdnUrl = rawUrl => rawUrl ? rawUrl.replace(/raw\.githubusercontent\.com\/([^\/]+)\/([^\/]+)\/([^\/]+)\//, 'cdn.jsdelivr.net/gh/$1/$2@$3/') : '';
 
             // --- Check Shared Files from Service Worker ---
+            // Web Share Target delivers the file to the service worker first.
+            // The SW stores it in Cache Storage and redirects here with a
+            // unique ?shared=<id> transfer id.
             async function checkSharedFiles() {
-                if ('caches' in window) {
-                    try {
-                        const cache = await caches.open('shared-files');
-                        const countRes = await cache.match('/shared-file-count');
-                        const namesRes = await cache.match('/shared-file-names');
-                        
-                        if (countRes) {
-                            const count = parseInt(await countRes.text());
-                            const names = namesRes ? await namesRes.json() : [];
-                            const dataTransfer = new DataTransfer();
-                            
-                            for (let i = 0; i < count; i++) {
-                                const res = await cache.match(`/shared-file-${i}`);
-                                if (res) {
-                                    const blob = await res.blob();
-                                    let originalName = names[i];
-                                    let ext = blob.type ? blob.type.split('/')[1] : 'bin';
-                                    
-                                    if (ext.includes(';')) ext = ext.split(';')[0];
-                                    
-                                    if (!originalName || originalName === 'blob' || originalName === 'image.jpg') {
-                                        originalName = `shared_${Date.now()}.${ext}`;
-                                    } else if (!originalName.includes('.')) {
-                                        originalName = `${originalName}.${ext}`;
-                                    }
-                                    
-                                    const file = new File([blob], originalName, { type: blob.type });
-                                    dataTransfer.items.add(file);
-                                    await cache.delete(`/shared-file-${i}`);
-                                }
-                            }
-                            
-                            await cache.delete('/shared-file-count');
-                            if (namesRes) await cache.delete('/shared-file-names'); 
-                            
-                            if (dataTransfer.files.length > 0) {
-                                DOM.fileInput.files = dataTransfer.files;
-                                DOM.statusMsg.innerText = `${dataTransfer.files.length} shared file(s) ready!`;
-                                processSelectedFiles(); // Trigger preview queue
-                            }
-                        }
-                    } catch (e) {
-                        console.error("Error reading shared files from cache:", e);
+                if (!('caches' in window)) return;
+
+                const params = new URLSearchParams(window.location.search);
+                const shareId = params.get('shared');
+                if (!shareId) return;
+
+                try {
+                    const cache = await caches.open('gh-uploader-shared');
+                    const metaKey = `/__gh_shared__/${shareId}/meta`;
+                    const metaRes = await cache.match(metaKey);
+
+                    if (!metaRes) {
+                        DOM.statusMsg.innerText = 'Shared file could not be loaded. Please share it again.';
+                        return;
                     }
+
+                    const meta = await metaRes.json();
+                    const dataTransfer = new DataTransfer();
+
+                    for (let i = 0; i < meta.keys.length; i++) {
+                        const res = await cache.match(meta.keys[i]);
+                        if (!res) continue;
+
+                        const blob = await res.blob();
+                        let originalName = (meta.names && meta.names[i]) || '';
+                        const type = (meta.types && meta.types[i]) || blob.type || 'application/octet-stream';
+
+                        // Some Android share providers use generic names.
+                        if (!originalName || originalName === 'blob') {
+                            const ext = type.includes('/') ? type.split('/')[1].split(';')[0] : 'bin';
+                            originalName = `shared_${Date.now()}_${i}.${ext}`;
+                        }
+
+                        dataTransfer.items.add(new File([blob], originalName, { type }));
+                    }
+
+                    if (dataTransfer.files.length > 0) {
+                        // Chromium allows assigning a DataTransfer FileList to
+                        // an input. This also updates the native input's UI.
+                        DOM.fileInput.files = dataTransfer.files;
+                        DOM.statusMsg.innerText = `${dataTransfer.files.length} shared file(s) ready!`;
+                        await processSelectedFiles();
+                    } else {
+                        DOM.statusMsg.innerText = 'No shared file was received. Please try sharing again.';
+                    }
+
+                    // Consume the transfer so files are not imported twice.
+                    await Promise.all(meta.keys.map(key => cache.delete(key)));
+                    await cache.delete(metaKey);
+
+                    // Remove the transfer id from the address bar.
+                    history.replaceState({}, document.title, './index.html');
+                } catch (e) {
+                    console.error('Error reading shared files:', e);
+                    DOM.statusMsg.innerText = 'Unable to load the shared file. Please try again.';
                 }
             }
 
