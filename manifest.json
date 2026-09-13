@@ -1,7 +1,7 @@
 {
   "name": "GH Uploader & Manager",
   "short_name": "GH Uploader",
-  "start_url": "./index.html",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#f6f8fa",
   "theme_color": "#2ea44f",
@@ -19,7 +19,7 @@
     }
   ],
   "share_target": {
-    "action": "./index.html?share-target",
+    "action": "./share-target",
     "method": "POST",
     "enctype": "multipart/form-data",
     "params": {
@@ -35,5 +35,6 @@
       ]
     }
   },
-  "scope": "./"
+  "scope": "./",
+  "id": "./"
 }

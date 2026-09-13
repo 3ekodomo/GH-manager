@@ -18,7 +18,8 @@ function isShareTargetRequest(request, url) {
     // Android/Web Share Target should send multipart/form-data. The query is
     // useful too, but don't depend on it because some browsers rewrite it.
     const contentType = request.headers.get('content-type') || '';
-    return url.searchParams.has('share-target') ||
+    return url.pathname.endsWith('/share-target') ||
+           url.searchParams.has('share-target') ||
            contentType.toLowerCase().includes('multipart/form-data');
 }
 
