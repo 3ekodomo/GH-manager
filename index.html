@@ -252,11 +252,15 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
-                    .then(reg => reg.update())
-                    .catch(err => console.error('Service worker registration failed:', err));
-            }
+            const serviceWorkerReady = ('serviceWorker' in navigator)
+                ? navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
+                    .then(reg => reg.update().catch(() => {}))
+                    .then(() => navigator.serviceWorker.ready)
+                    .catch(err => {
+                        console.error('Service worker registration failed:', err);
+                        return null;
+                    })
+                : Promise.resolve(null);
 
             const DOM = {
                 token: document.getElementById('gh-token'), repo: document.getElementById('gh-repo'),
@@ -769,8 +773,10 @@
                 } catch(e) { alert('Move failed.'); DOM.managerStatus.innerText = ''; }
             };
 
-            // Call on load
-            checkSharedFiles();
+            // Wait for the service worker before reading a share transfer.
+            // This avoids a race on Android when the PWA is launched directly
+            // from the system share sheet.
+            serviceWorkerReady.then(() => checkSharedFiles());
             renderHistory();
         });
     </script>

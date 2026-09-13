@@ -1,7 +1,9 @@
 {
+  "id": "./",
   "name": "GH Uploader & Manager",
   "short_name": "GH Uploader",
   "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#f6f8fa",
   "theme_color": "#2ea44f",
@@ -19,7 +21,7 @@
     }
   ],
   "share_target": {
-    "action": "./share-target",
+    "action": "./",
     "method": "POST",
     "enctype": "multipart/form-data",
     "params": {
@@ -28,13 +30,9 @@
       "files": [
         {
           "name": "shared_files",
-          "accept": [
-            "*/*"
-          ]
+          "accept": ["image/*", "video/*", "audio/*", "text/*", "application/*", "*/*"]
         }
       ]
     }
-  },
-  "scope": "./",
-  "id": "./"
+  }
 }
