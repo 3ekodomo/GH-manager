@@ -18,14 +18,47 @@ self.addEventListener('fetch', (event) => {
         event.respondWith((async () => {
             try {
                 const formData = await event.request.formData();
-                const files = formData.getAll('shared_files');
+                let allFiles = [];
 
-                if (files && files.length > 0) {
+                // 1. Check for standard 'shared_files' from manifest
+                const sharedFiles = formData.getAll('shared_files');
+                if (sharedFiles && sharedFiles.length > 0) {
+                    for (const item of sharedFiles) {
+                        if (typeof item === 'string') {
+                            // Convert string to a text file
+                            allFiles.push(new File([item], 'shared_text.txt', { type: 'text/plain' }));
+                        } else {
+                            allFiles.push(item);
+                        }
+                    }
+                }
+
+                // 2. Fallback: Iterate over all formData entries to find any File objects
+                // In case the OS appended files under a different field name
+                if (allFiles.length === 0) {
+                    for (const [key, value] of formData.entries()) {
+                        if (value && typeof value === 'object' && 'name' in value) {
+                            allFiles.push(value);
+                        }
+                    }
+                }
+
+                // 3. Fallback: If no files were found, check if title or text was shared
+                if (allFiles.length === 0) {
+                    const text = formData.get('text');
+                    const title = formData.get('title');
+                    if (text || title) {
+                        const content = [title, text].filter(Boolean).join('\n\n');
+                        allFiles.push(new File([content], 'shared_content.txt', { type: 'text/plain' }));
+                    }
+                }
+
+                if (allFiles.length > 0) {
                     const cache = await caches.open('shared-files');
                     const fileNames = [];
                     
-                    for (let i = 0; i < files.length; i++) {
-                        const file = files[i];
+                    for (let i = 0; i < allFiles.length; i++) {
+                        const file = allFiles[i];
                         fileNames.push(file.name);
                         
                         // Store the actual file blob in cache
@@ -33,7 +66,7 @@ self.addEventListener('fetch', (event) => {
                     }
                     
                     // Store metadata so index.html knows how many files to pull
-                    await cache.put('/shared-file-count', new Response(files.length.toString()));
+                    await cache.put('/shared-file-count', new Response(allFiles.length.toString()));
                     await cache.put('/shared-file-names', new Response(JSON.stringify(fileNames)));
                 }
             } catch (error) {
