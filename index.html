@@ -368,7 +368,7 @@
 
                 try {
                     const cache = await caches.open('gh-uploader-shared');
-                    const metaKey = `/__gh_shared__/${shareId}/meta`;
+                    const metaKey = new URL(`./__gh_shared__/${shareId}/meta`, window.location.href).href;
                     const metaRes = await cache.match(metaKey);
 
                     if (!metaRes) {
@@ -428,6 +428,46 @@
             });
             DOM.compQuality.addEventListener('change', processSelectedFiles);
             DOM.fileInput.addEventListener('change', processSelectedFiles);
+
+            document.getElementById('paste-btn').addEventListener('click', async () => {
+                try {
+                    const clipboardItems = await navigator.clipboard.read();
+                    const dataTransfer = new DataTransfer();
+                    for (const clipboardItem of clipboardItems) {
+                        for (const type of clipboardItem.types) {
+                            if (type.startsWith('image/')) {
+                                const blob = await clipboardItem.getType(type);
+                                const file = new File([blob], `pasted_image_${Date.now()}.${type.split('/')[1]}`, { type });
+                                dataTransfer.items.add(file);
+                                break;
+                            }
+                        }
+                    }
+                    if (dataTransfer.files.length > 0) {
+                        DOM.fileInput.files = dataTransfer.files;
+                        await processSelectedFiles();
+                        DOM.statusMsg.innerText = 'Pasted image ready for upload.';
+                    } else {
+                        DOM.statusMsg.innerText = 'No image found in clipboard.';
+                    }
+                } catch (err) {
+                    console.error('Paste error:', err);
+                    DOM.statusMsg.innerText = 'Clipboard access denied or empty. Try Ctrl+V/Cmd+V.';
+                }
+            });
+
+            document.addEventListener('paste', async (e) => {
+                const activeTag = document.activeElement ? document.activeElement.tagName : '';
+                if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') {
+                    if (document.activeElement.id !== 'file-input') return;
+                }
+                if (e.clipboardData && e.clipboardData.files.length > 0) {
+                    DOM.fileInput.files = e.clipboardData.files;
+                    await processSelectedFiles();
+                    DOM.statusMsg.innerText = 'Pasted file(s) ready for upload.';
+                    e.preventDefault();
+                }
+            });
 
             async function compressImage(file, quality) {
                 return new Promise((resolve) => {
